@@ -26,6 +26,9 @@ Library improvements
   * The functions `remotecall`, `remotecall_fetch`, and `remotecall_wait` now have the
     function argument as the first argument to allow for do-block syntax ([#13338]).
 
+  * A new `SparseVector` type allows for one-dimensional sparse arrays. Slicing
+    and reshaping sparse matrices now return vectors when appropriate.
+
 Deprecated or removed
 ---------------------
 
