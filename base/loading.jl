@@ -2,6 +2,13 @@
 
 # Base.require is the implementation for the `import` statement
 
+# Case-sensitive version of isfile
+function isfile_casesensitive(path)
+    isfile(path) || return false
+    dir, filename = splitdir(path)
+    any(readdir(dir) .== filename)
+end
+
 # `wd` is a working directory to search. defaults to current working directory.
 # if `wd === nothing`, no extra path is searched.
 function find_in_path(name::AbstractString, wd = pwd())
@@ -13,15 +20,15 @@ function find_in_path(name::AbstractString, wd = pwd())
         name = string(base,".jl")
     end
     if wd !== nothing
-        isfile(joinpath(wd,name)) && return joinpath(wd,name)
+        isfile_casesensitive(joinpath(wd,name)) && return joinpath(wd,name)
     end
     for prefix in [Pkg.dir(); LOAD_PATH]
         path = joinpath(prefix, name)
-        isfile(path) && return abspath(path)
+        isfile_casesensitive(path) && return abspath(path)
         path = joinpath(prefix, base, "src", name)
-        isfile(path) && return abspath(path)
+        isfile_casesensitive(path) && return abspath(path)
         path = joinpath(prefix, name, "src", name)
-        isfile(path) && return abspath(path)
+        isfile_casesensitive(path) && return abspath(path)
     end
     return nothing
 end
@@ -47,7 +54,7 @@ function find_all_in_cache_path(mod::Symbol)
     paths = AbstractString[]
     for prefix in LOAD_CACHE_PATH
         path = joinpath(prefix, name*".ji")
-        if isfile(path)
+        if isfile_casesensitive(path)
             push!(paths, path)
         end
     end
