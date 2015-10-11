@@ -2,13 +2,14 @@
 
 # Base.require is the implementation for the `import` statement
 
-# Case-sensitive version of isfile
-@windows_only function isfile_casesensitive(path)
+# Generic case-sensitive version of isfile
+function isfile_casesensitive(path)
     isfile(path) || return false
     dir, filename = splitdir(path)
     any(readdir(dir) .== filename)
 end
 
+# Higher-performance version for POSIX systems
 @unix_only function isfile_casesensitive(path)
     isfile(path) || return false
     realpath(path) == path
