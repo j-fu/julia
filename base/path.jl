@@ -125,6 +125,23 @@ abspath(a::AbstractString, b::AbstractString...) = abspath(joinpath(a,b...))
     end
 end
 
+@windows_only longpath(path::AbstractString) = longpath(utf16(path))
+@windows_only function longpath(path::UTF16String)
+    p = UInt32((sizeof(path)>>2) + 1)
+    while true
+        buflength = p
+        buf = zeros(UInt16,buflength)
+        p = ccall((:GetLongPathNameW, "Kernel32"), stdcall,
+            UInt32, (Cwstring, Ptr{UInt16}, UInt32),
+            path, buf, buflength)
+        systemerror(:longpath, p == 0)
+        if (p < buflength)
+            resize!(buf, p+1)
+            return utf8(UTF16String(buf))
+        end
+    end
+end
+
 @unix_only function realpath(path::AbstractString)
     p = ccall(:realpath, Ptr{UInt8}, (Cstring, Ptr{UInt8}), path, C_NULL)
     systemerror(:realpath, p == C_NULL)

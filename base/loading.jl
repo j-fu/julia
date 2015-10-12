@@ -3,15 +3,24 @@
 # Base.require is the implementation for the `import` statement
 
 # Generic case-sensitive version of isfile
-function isfile_casesensitive(path)
+function isfile_casesensitive_slow(path)
     isfile(path) || return false
     dir, filename = splitdir(path)
     any(readdir(dir) .== filename)
 end
 
-# Higher-performance version for POSIX systems
-@unix_only function isfile_casesensitive(path)
+isfile_casesensitive(path) = isfile_casesensitive_slow(path)
+
+@windows_only function isfile_casesensitive(path)
     isfile(path) || return false
+    longpath(path) == path
+end
+
+@linux_only isfile_casesensitive(path) = isfile(path)
+
+@osx_only function isfile_casesensitive(path)
+    isfile(path) || return false
+    islink(path) && return isfile_casesensitive_slow(path)
     realpath(path) == path
 end
 
