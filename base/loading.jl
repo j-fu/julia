@@ -2,50 +2,78 @@
 
 # Base.require is the implementation for the `import` statement
 
-# Generic case-sensitive version of isfile
-function isfile_casesensitive_slow(path)
-    isfile(path) || return false
-    dir, filename = splitdir(path)
-    any(readdir(dir) .== filename)
-end
+# Cross-platform case-sensitive path canonicalization
 
-isfile_casesensitive(path) = isfile_casesensitive_slow(path)
-
-@windows_only function isfile_casesensitive(path)
-    isfile(path) || return false
-    longpath(path) == path
-end
-
-@linux_only isfile_casesensitive(path) = isfile(path)
-
-const ATTR_BIT_MAP_COUNT=5
-const ATTR_CMN_NAME=1
-const BITMAPCOUNT = 1
-const COMMONATTR = 5
-const FSOPT_NOFOLLOW=1
-
-const attr_list = zeros(UInt8, 24)
-attr_list[BITMAPCOUNT] = ATTR_BIT_MAP_COUNT
-attr_list[COMMONATTR] = ATTR_CMN_NAME
-
-@osx_only function isfile_casesensitive(path)
-    isfile(path) || return false
-    buf_size = length(path) + 12
-    local canon_path
-    while true
-        buf = zeros(UInt8, buf_size)
-        ret = ccall(:getattrlist, Cint, (Cstring, Ptr{Void}, Ptr{Void}, Csize_t, Culong), path,
-          attr_list, buf, sizeof(buf), FSOPT_NOFOLLOW)
-        ret == 0 || error(Libc.errno())
-        len = unsafe_load(convert(Ptr{UInt32}, pointer(buf)), 3)
-        if (len + 12) >= buf_size
-            buf_size *= 2
-            continue
-        end
-        canon_path = bytestring(pointer(buf, 13))
-        break
+if OS_NAME ∈ (:Linux, :FreeBSD)
+    # Case-sensitive filesystems, don't have to do anything
+    isfile_casesensitive(path) = isfile(path)
+elseif OS_NAME == :Windows
+    # GetLongPathName Win32 function returns the case-preserved filename on NTFS.
+    function isfile_casesensitive(path)
+        isfile(path) || return false  # Fail fast
+        longpath(path) == path
     end
-    basename(path) == canon_path
+elseif OS_NAME == :Darwin
+    # HFS+ filesystem is case-preserving. The getattrlist API returns
+    # a case-preserved filename. In the rare event that HFS+ is operating
+    # in case-sensitive mode, this will still work but will be redundant.
+
+    # Constants from <sys/attr.h>
+    const ATRATTR_BIT_MAP_COUNT = 5
+    const ATTR_CMN_NAME = 1
+    const BITMAPCOUNT = 1
+    const COMMONATTR = 5
+    const FSOPT_NOFOLLOW = 1  # Don't follow symbolic links
+
+    const attr_list = zeros(UInt8, 24)
+    attr_list[BITMAPCOUNT] = ATRATTR_BIT_MAP_COUNT
+    attr_list[COMMONATTR] = ATTR_CMN_NAME
+
+    # This essentially corresponds to the following C code:
+    # attrlist attr_list;
+    # memset(&attr_list, 0, sizeof(attr_list));
+    # attr_list.bitmapcount = ATTR_BIT_MAP_COUNT;
+    # attr_list.commonattr = ATTR_CMN_NAME;
+    # struct Buffer {
+    #    u_int32_t total_length;
+    #    u_int32_t filename_offset;
+    #    u_int32_t filename_length;
+    #    char filename[max_filename_length];
+    # };
+    # Buffer buf;
+    # getattrpath(path, &attr_list, &buf, sizeof(buf), FSOPT_NOFOLLOW);
+    function isfile_casesensitive(path)
+        isfile(path) || return false
+        path_basename = bytestring(basename(path))
+        local casepreserved_basename
+        const header_size = 12
+        buf = Array(UInt8, length(path_basename) + header_size + 1)
+        while true
+            ret = ccall(:getattrlist, Cint,
+                        (Cstring, Ptr{Void}, Ptr{Void}, Csize_t, Culong),
+                        path, attr_list, buf, sizeof(buf), FSOPT_NOFOLLOW)
+            systemerror(:getattrlist, ret ≠ 0)
+            # len = unsafe_load(convert(Ptr{UInt32}, pointer(buf)), 3)
+            filename_length = unsafe_load(
+              convert(Ptr{UInt32}, pointer(buf) + 8))
+            if (filename_length + header_size) > length(buf)
+                resize!(buf, filename_length + header_size)
+                continue
+            end
+            casepreserved_basename =
+              sub(buf, (header_size+1):(header_size+filename_length-1))
+            break
+        end
+        # Hack to compensate for inability to create a string from a subarray with no allocations.
+        path_basename.data == casepreserved_basename
+    end
+else
+    # Generic fallback that performs a slow directory listing.
+    function isfile_casesensitive(path)
+        isfile(path) || return false
+        dir, filename = splitdir(path)
+        any(readdir(dir) .== filename)
+    end
 end
 
 # `wd` is a working directory to search. defaults to current working directory.

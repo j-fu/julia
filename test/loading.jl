@@ -10,3 +10,10 @@ thefname = "the fname!//\\&\0\1*"
 @test include_string("Base.source_path()", thefname) == Base.source_path()
 @test basename(@__FILE__) == "loading.jl"
 @test isabspath(@__FILE__)
+
+let true_filename = "cAsEtEsT.jl", lowered_filename="casetest.jl"
+  touch(true_filename)
+  @test Base.isfile_casesensitive(true_filename)
+  @test !Base.isfile_casesensitive(lowered_filename)
+  rm(true_filename)
+end
