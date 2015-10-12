@@ -53,7 +53,6 @@ elseif OS_NAME == :Darwin
                         (Cstring, Ptr{Void}, Ptr{Void}, Csize_t, Culong),
                         path, attr_list, buf, sizeof(buf), FSOPT_NOFOLLOW)
             systemerror(:getattrlist, ret ≠ 0)
-            # len = unsafe_load(convert(Ptr{UInt32}, pointer(buf)), 3)
             filename_length = unsafe_load(
               convert(Ptr{UInt32}, pointer(buf) + 8))
             if (filename_length + header_size) > length(buf)
