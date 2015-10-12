@@ -21,7 +21,7 @@ end
 @osx_only function isfile_casesensitive(path)
     isfile(path) || return false
     islink(path) && return isfile_casesensitive_slow(path)
-    realpath(path) == path
+    basename(realpath(path)) == basename(path)
 end
 
 # `wd` is a working directory to search. defaults to current working directory.
