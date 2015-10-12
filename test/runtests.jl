@@ -14,13 +14,27 @@ cd(dirname(@__FILE__)) do
     n = 1
     if net_on
         n = min(8, CPU_CORES, length(tests))
-        n > 1 && addprocs(n; exeflags=`--check-bounds=yes --depwarn=error`)
-        blas_set_num_threads(1)
+        # n > 1 && addprocs(n; exeflags=`--check-bounds=yes --depwarn=error`)
+        # blas_set_num_threads(1)
     end
 
     @everywhere include("testdefs.jl")
 
-    reduce(propagate_errors, nothing, pmap(runtests, tests; err_retry=false, err_stop=true))
+    # reduce(propagate_errors, nothing, pmap(runtests, tests; err_retry=false, err_stop=true))
+    m = 0
+    while !isempty(tests)
+        if m < n
+            testi = pop!(tests)
+            m += 1
+            @schedule begin
+                runtests(testi)
+                m -= 1
+                return 0
+            end
+        else
+            sleep(0.5)
+        end
+    end
 
     if compile_test
         n > 1 && print("\tFrom worker 1:\t")
