@@ -18,10 +18,34 @@ end
 
 @linux_only isfile_casesensitive(path) = isfile(path)
 
+const ATTR_BIT_MAP_COUNT=5
+const ATTR_CMN_NAME=1
+const BITMAPCOUNT = 1
+const COMMONATTR = 5
+const FSOPT_NOFOLLOW=1
+
+const attr_list = zeros(UInt8, 24)
+attr_list[BITMAPCOUNT] = ATTR_BIT_MAP_COUNT
+attr_list[COMMONATTR] = ATTR_CMN_NAME
+
 @osx_only function isfile_casesensitive(path)
     isfile(path) || return false
-    islink(path) && return isfile_casesensitive_slow(path)
-    basename(realpath(path)) == basename(path)
+    buf_size = length(path) + 12
+    local canon_path
+    while true
+        buf = zeros(UInt8, buf_size)
+        ret = ccall(:getattrlist, Cint, (Cstring, Ptr{Void}, Ptr{Void}, Csize_t, Culong), path,
+          attr_list, buf, sizeof(buf), FSOPT_NOFOLLOW)
+        ret == 0 || error(Libc.errno())
+        len = unsafe_load(convert(Ptr{UInt32}, pointer(buf)), 3)
+        if (len + 12) >= buf_size
+            buf_size *= 2
+            continue
+        end
+        canon_path = bytestring(pointer(buf, 13))
+        break
+    end
+    basename(path) == canon_path
 end
 
 # `wd` is a working directory to search. defaults to current working directory.
